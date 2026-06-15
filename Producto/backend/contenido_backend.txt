@@ -1,0 +1,2025 @@
+﻿
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\config\SecurityConfig.java =====
+
+package com.devroom.backend.config;
+
+import com.devroom.backend.security.JwtAuthFilter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    private final JwtAuthFilter jwtAuthFilter;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/auth/**").permitAll()
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\controller\AuthController.java =====
+
+package com.devroom.backend.controller;
+
+import com.devroom.backend.dto.AuthResponse;
+import com.devroom.backend.dto.UserProfileDTO;
+import com.devroom.backend.security.JwtUtil;
+import com.devroom.backend.service.AuthService;
+import com.devroom.backend.service.UserService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    private final AuthService authService;
+    private final UserService userService;
+    private final JwtUtil jwtUtil;
+
+    public AuthController(AuthService authService, UserService userService, JwtUtil jwtUtil) {
+        this.authService = authService;
+        this.userService = userService;
+        this.jwtUtil = jwtUtil;
+    }
+
+    @PostMapping("/github/callback")
+    public ResponseEntity<AuthResponse> githubCallback(@RequestBody Map<String, String> body) {
+        String code = body.get("code");
+        if (code == null || code.isBlank()) return ResponseEntity.badRequest().build();
+        return ResponseEntity.ok(authService.authenticateWithGitHub(code));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<UserProfileDTO> getMe(@RequestHeader("Authorization") String authHeader) {
+        Long userId = jwtUtil.extractUserId(authHeader.replace("Bearer ", ""));
+        return ResponseEntity.ok(userService.getProfileById(userId, userId));
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\controller\FeedController.java =====
+
+package com.devroom.backend.controller;
+
+import com.devroom.backend.dto.FeedActivityDTO;
+import com.devroom.backend.security.JwtUtil;
+import com.devroom.backend.service.FeedService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/feed")
+public class FeedController {
+
+    private final FeedService feedService;
+    private final JwtUtil jwtUtil;
+
+    public FeedController(FeedService feedService, JwtUtil jwtUtil) {
+        this.feedService = feedService;
+        this.jwtUtil = jwtUtil;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<FeedActivityDTO>> getFeed(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Long userId = jwtUtil.extractUserId(authHeader.replace("Bearer ", ""));
+        return ResponseEntity.ok(feedService.getFeedForUser(userId, page, size));
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\controller\JobController.java =====
+
+package com.devroom.backend.controller;
+
+import com.devroom.backend.dto.CreateJobDTO;
+import com.devroom.backend.dto.JobApplicationDTO;
+import com.devroom.backend.dto.JobDTO;
+import com.devroom.backend.security.JwtUtil;
+import com.devroom.backend.service.JobService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/jobs")
+public class JobController {
+
+    private final JobService jobService;
+    private final JwtUtil jwtUtil;
+
+    public JobController(JobService jobService, JwtUtil jwtUtil) {
+        this.jobService = jobService;
+        this.jwtUtil = jwtUtil;
+    }
+
+    private Long extractUserId(String authHeader) {
+        return jwtUtil.extractUserId(authHeader.replace("Bearer ", ""));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<JobDTO>> listJobs(
+            @RequestParam(required = false) String modality,
+            @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(jobService.listActiveJobs(modality, search));
+    }
+
+    @PostMapping
+    public ResponseEntity<JobDTO> createJob(
+            @RequestBody CreateJobDTO dto,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(jobService.createJob(extractUserId(authHeader), dto));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<JobDTO> getJob(@PathVariable String id) {
+        return ResponseEntity.ok(jobService.getJobById(id));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<JobDTO> updateJob(
+            @PathVariable String id,
+            @RequestBody CreateJobDTO dto,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(jobService.updateJob(extractUserId(authHeader), id, dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, String>> deleteJob(
+            @PathVariable String id,
+            @RequestHeader("Authorization") String authHeader) {
+        jobService.deleteJob(extractUserId(authHeader), id);
+        return ResponseEntity.ok(Map.of("message", "Oferta eliminada"));
+    }
+
+    @PostMapping("/{id}/apply")
+    public ResponseEntity<JobApplicationDTO> applyToJob(
+            @PathVariable String id,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(jobService.applyToJob(extractUserId(authHeader), id));
+    }
+
+    @GetMapping("/{id}/applications")
+    public ResponseEntity<List<JobApplicationDTO>> getApplications(
+            @PathVariable String id,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(jobService.getApplications(extractUserId(authHeader), id));
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\controller\RepositoryController.java =====
+
+package com.devroom.backend.controller;
+
+import com.devroom.backend.dto.RepoDTO;
+import com.devroom.backend.security.JwtUtil;
+import com.devroom.backend.service.RepositoryService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api")
+public class RepositoryController {
+
+    private final RepositoryService repositoryService;
+    private final JwtUtil jwtUtil;
+
+    public RepositoryController(RepositoryService repositoryService, JwtUtil jwtUtil) {
+        this.repositoryService = repositoryService;
+        this.jwtUtil = jwtUtil;
+    }
+
+    @GetMapping("/users/{username}/repos")
+    public ResponseEntity<List<RepoDTO>> getUserRepos(@PathVariable String username) {
+        return ResponseEntity.ok(repositoryService.getReposByUsername(username));
+    }
+
+    @PostMapping("/repos/sync")
+    public ResponseEntity<Map<String, Object>> syncRepos(
+            @RequestHeader("Authorization") String authHeader) {
+        Long userId = jwtUtil.extractUserId(authHeader.replace("Bearer ", ""));
+        int count = repositoryService.syncReposFromGitHub(userId);
+        return ResponseEntity.ok(Map.of("message", "Repos sincronizados", "count", count));
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\controller\UserController.java =====
+
+package com.devroom.backend.controller;
+
+import com.devroom.backend.dto.UpdateUserDTO;
+import com.devroom.backend.dto.UserProfileDTO;
+import com.devroom.backend.security.JwtUtil;
+import com.devroom.backend.service.UserService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+
+    private final UserService userService;
+    private final JwtUtil jwtUtil;
+
+    public UserController(UserService userService, JwtUtil jwtUtil) {
+        this.userService = userService;
+        this.jwtUtil = jwtUtil;
+    }
+
+    private Long extractUserId(String authHeader) {
+        return jwtUtil.extractUserId(authHeader.replace("Bearer ", ""));
+    }
+
+    @GetMapping("/{username}")
+    public ResponseEntity<UserProfileDTO> getProfile(
+            @PathVariable String username,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(userService.getProfileByUsername(username, extractUserId(authHeader)));
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<UserProfileDTO> updateProfile(
+            @RequestBody UpdateUserDTO dto,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(userService.updateProfile(extractUserId(authHeader), dto));
+    }
+
+    @PostMapping("/{username}/follow")
+    public ResponseEntity<Map<String, String>> follow(
+            @PathVariable String username,
+            @RequestHeader("Authorization") String authHeader) {
+        userService.follow(extractUserId(authHeader), username);
+        return ResponseEntity.ok(Map.of("message", "Siguiendo a " + username));
+    }
+
+    @DeleteMapping("/{username}/follow")
+    public ResponseEntity<Map<String, String>> unfollow(
+            @PathVariable String username,
+            @RequestHeader("Authorization") String authHeader) {
+        userService.unfollow(extractUserId(authHeader), username);
+        return ResponseEntity.ok(Map.of("message", "Dejaste de seguir a " + username));
+    }
+
+    @GetMapping("/{username}/followers")
+    public ResponseEntity<List<UserProfileDTO>> getFollowers(
+            @PathVariable String username,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(userService.getFollowers(username, extractUserId(authHeader)));
+    }
+
+    @GetMapping("/{username}/following")
+    public ResponseEntity<List<UserProfileDTO>> getFollowing(
+            @PathVariable String username,
+            @RequestHeader("Authorization") String authHeader) {
+        return ResponseEntity.ok(userService.getFollowing(username, extractUserId(authHeader)));
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\AuthResponse.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class AuthResponse {
+    private String token;
+    private Long userId;
+    private String username;
+    private String avatarUrl;
+    private String name;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\CreateJobDTO.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+public class CreateJobDTO {
+    private String title;
+    private String description;
+    private String companyName;
+    private String location;
+    private String salaryRange;
+    private String modality;
+    private LocalDateTime expiresAt;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\FeedActivityDTO.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+@Data @Builder @NoArgsConstructor @AllArgsConstructor
+public class FeedActivityDTO {
+    private String id;
+    private String actorUsername;
+    private String actorAvatarUrl;
+    private String type;
+    private String content;
+    private String refId;
+    private LocalDateTime createdAt;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\GitHubRepoDTO.java =====
+
+package com.devroom.backend.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
+
+@Data
+public class GitHubRepoDTO {
+    private Long id;
+    private String name;
+    private String description;
+
+    @JsonProperty("html_url")
+    private String htmlUrl;
+
+    private String language;
+
+    @JsonProperty("stargazers_count")
+    private Integer stargazersCount;
+
+    @JsonProperty("forks_count")
+    private Integer forksCount;
+
+    @JsonProperty("private")
+    private Boolean isPrivate;
+
+    @JsonProperty("updated_at")
+    private String updatedAt;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\GitHubUserDTO.java =====
+
+package com.devroom.backend.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
+
+@Data
+public class GitHubUserDTO {
+    private Long id;
+    private String login;
+    private String name;
+    private String email;
+    private String bio;
+    private String location;
+    @JsonProperty("avatar_url")
+    private String avatarUrl;
+    @JsonProperty("html_url")
+    private String htmlUrl;
+    private Integer followers;
+    private Integer following;
+    @JsonProperty("public_repos")
+    private Integer publicRepos;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\JobApplicationDTO.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+@Data @Builder @NoArgsConstructor @AllArgsConstructor
+public class JobApplicationDTO {
+    private String id;
+    private String jobId;
+    private String jobTitle;
+    private Long applicantId;
+    private String applicantUsername;
+    private String applicantAvatarUrl;
+    private String status;
+    private Integer matchScore;
+    private LocalDateTime appliedAt;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\JobDTO.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+@Data @Builder @NoArgsConstructor @AllArgsConstructor
+public class JobDTO {
+    private String id;
+    private String title;
+    private String description;
+    private String companyName;
+    private String location;
+    private String salaryRange;
+    private String modality;
+    private Boolean isActive;
+    private LocalDateTime publishedAt;
+    private LocalDateTime expiresAt;
+    private Long postedByUserId;
+    private String postedByUsername;
+    private String postedByAvatarUrl;
+    private long applicantsCount;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\RepoDTO.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data @Builder @NoArgsConstructor @AllArgsConstructor
+public class RepoDTO {
+    private String id;
+    private String githubRepoId;
+    private String name;
+    private String description;
+    private String url;
+    private String mainLanguage;
+    private Integer commits;
+    private String scoreLevel;
+    private Boolean isPrivate;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\UpdateUserDTO.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.Data;
+
+@Data
+public class UpdateUserDTO {
+    private String name;
+    private String bio;
+    private String location;
+    private String role;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\dto\UserProfileDTO.java =====
+
+package com.devroom.backend.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data @Builder @NoArgsConstructor @AllArgsConstructor
+public class UserProfileDTO {
+    private Long id;
+    private String username;
+    private String name;
+    private String email;
+    private String avatarUrl;
+    private String bio;
+    private String location;
+    private String role;
+    private String githubUrl;
+    private long followersCount;
+    private long followingCount;
+    private boolean isFollowing;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\Cv.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "cvs")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Cv {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    private Integer score;
+
+    @Column(columnDefinition = "TEXT")
+    private String summary;
+
+    @Column(name = "pdf_url", length = 500)
+    private String pdfUrl;
+
+    @Builder.Default
+    @Column(name = "is_public", nullable = false)
+    private Boolean isPublic = false;
+
+    @Builder.Default
+    @Column(name = "is_online", nullable = false)
+    private Boolean isOnline = false;
+
+    @Column(name = "generated_at")
+    private LocalDateTime generatedAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @PrePersist
+    public void prePersist() {
+        this.generatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\FeedActivity.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "feed_activities")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class FeedActivity {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    @Column(nullable = false, length = 50)
+    private String type;
+
+    @Column(columnDefinition = "TEXT")
+    private String content;
+
+    @Column(name = "ref_id", length = 120)
+    private String refId;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\Follow.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "follows")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Follow {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    @Column(name = "followed_at")
+    private LocalDateTime followedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "follower_user_id", nullable = false)
+    private User follower;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "followed_user_id", nullable = false)
+    private User followedUser;
+
+    @PrePersist
+    public void prePersist() {
+        this.followedAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\Job.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "jobs")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Job {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    @Column(nullable = false, length = 150)
+    private String title;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "company_name", length = 150)
+    private String companyName;
+
+    @Column(length = 150)
+    private String location;
+
+    @Column(name = "salary_range", length = 100)
+    private String salaryRange;
+
+    @Column(length = 50)
+    private String modality;
+
+    @Builder.Default
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @PrePersist
+    public void prePersist() {
+        this.publishedAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\JobApplication.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(
+    name = "job_applications",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_job_application_user_job",
+            columnNames = {"user_id", "job_id"}
+        )
+    }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class JobApplication {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    @Column(name = "match_score")
+    private Integer matchScore;
+
+    @Column(length = 50)
+    private String status;
+
+    @Column(name = "applied_at")
+    private LocalDateTime appliedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "job_id", nullable = false)
+    private Job job;
+
+    @PrePersist
+    public void prePersist() {
+        this.appliedAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\JobSkillRequirement.java =====
+
+package com.devroom.backend.entity;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "job_skill_requirements")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class JobSkillRequirement {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    @Column(name = "skill_name", nullable = false, length = 80)
+    private String skillName;
+
+    @Builder.Default
+    @Column(name = "is_required", nullable = false)
+    private Boolean isRequired = true;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "job_id", nullable = false)
+    private Job job;
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\RepositoryEntity.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "repositories")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class RepositoryEntity {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    @Column(name = "github_repo_id", length = 100)
+    private String githubRepoId;
+
+    @Column(nullable = false, length = 140)
+    private String name;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(length = 500)
+    private String url;
+
+    @Column(name = "main_language", length = 80)
+    private String mainLanguage;
+
+    private Integer commits;
+
+    @Column(name = "score_level", length = 40)
+    private String scoreLevel;
+
+    @Builder.Default
+    @Column(name = "is_private", nullable = false)
+    private Boolean isPrivate = false;
+
+    @Column(name = "last_commit_date")
+    private LocalDateTime lastCommitDate;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\Skill.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "skills")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Skill {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(length = 36)
+    private String id;
+
+    @Column(nullable = false, length = 100)
+    private String name;
+
+    private Integer percentage;
+
+    @Column(length = 40)
+    private String level;
+
+    @Column(length = 100)
+    private String source;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\entity\User.java =====
+
+package com.devroom.backend.entity;
+
+import java.time.LocalDateTime;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Entity
+@Table(name = "users")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "github_access_token", length = 500)
+    private String githubAccessToken;
+
+    @Column(name = "github_id", unique = true, length = 100)
+    private String githubId;
+
+    @Column(nullable = false, unique = true, length = 100)
+    private String username;
+
+    @Column(length = 120)
+    private String name;
+
+    @Column(unique = true, length = 200)
+    private String email;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
+    @Column(columnDefinition = "TEXT")
+    private String bio;
+
+    @Column(length = 150)
+    private String location;
+
+    @Column(length = 50)
+    private String role;
+
+    // âœ… CAMPO NUEVO â€” requerido por AuthService.setGithubUrl()
+    @Column(name = "github_url", length = 300)
+    private String githubUrl;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\CvRepository.java =====
+
+package com.devroom.backend.repository;
+
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.devroom.backend.entity.Cv;
+
+public interface CvRepository extends JpaRepository<Cv, String> {
+    List<Cv> findByUserId(Long userId);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\FeedActivityRepository.java =====
+
+package com.devroom.backend.repository;
+
+import com.devroom.backend.entity.FeedActivity;
+import com.devroom.backend.entity.User;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface FeedActivityRepository extends JpaRepository<FeedActivity, String> {
+    List<FeedActivity> findByUserIn(List<User> users, Pageable pageable);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\FollowRepository.java =====
+
+package com.devroom.backend.repository;
+
+import com.devroom.backend.entity.Follow;
+import com.devroom.backend.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+import java.util.Optional;
+
+public interface FollowRepository extends JpaRepository<Follow, String> {
+    boolean existsByFollowerAndFollowedUser(User follower, User followedUser);
+    Optional<Follow> findByFollowerAndFollowedUser(User follower, User followedUser);
+    List<Follow> findByFollower(User follower);
+    List<Follow> findByFollowedUser(User followedUser);
+    long countByFollower(User follower);
+    long countByFollowedUser(User followedUser);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\JobApplicationRepository.java =====
+
+package com.devroom.backend.repository;
+
+import com.devroom.backend.entity.Job;
+import com.devroom.backend.entity.JobApplication;
+import com.devroom.backend.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface JobApplicationRepository extends JpaRepository<JobApplication, String> {
+    boolean existsByUserAndJob(User user, Job job);
+    List<JobApplication> findByJob(Job job);
+    long countByJob(Job job);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\JobRepository.java =====
+
+package com.devroom.backend.repository;
+
+import com.devroom.backend.entity.Job;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface JobRepository extends JpaRepository<Job, String> {
+    List<Job> findByIsActiveTrue();
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\JobSkillRequirementRepository.java =====
+
+package com.devroom.backend.repository;
+
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.devroom.backend.entity.JobSkillRequirement;
+
+public interface JobSkillRequirementRepository extends JpaRepository<JobSkillRequirement, String> {
+    List<JobSkillRequirement> findByJobId(String jobId);
+    List<JobSkillRequirement> findBySkillNameContainingIgnoreCase(String skillName);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\RepositoryEntityRepository.java =====
+
+package com.devroom.backend.repository;
+
+import com.devroom.backend.entity.RepositoryEntity;
+import com.devroom.backend.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+
+public interface RepositoryEntityRepository extends JpaRepository<RepositoryEntity, String> {
+    List<RepositoryEntity> findByUser(User user);
+    @Transactional
+    void deleteByUser(User user);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\SkillRepository.java =====
+
+package com.devroom.backend.repository;
+
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.devroom.backend.entity.Skill;
+
+public interface SkillRepository extends JpaRepository<Skill, String> {
+    List<Skill> findByUserId(Long userId);
+    List<Skill> findByNameContainingIgnoreCase(String name);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\repository\UserRepository.java =====
+
+package com.devroom.backend.repository;
+
+import com.devroom.backend.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+    Optional<User> findByGithubId(String githubId);
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\security\JwtAuthFilter.java =====
+
+package com.devroom.backend.security;
+
+import java.io.IOException;
+import java.util.List;
+
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+@Component
+public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private final JwtUtil jwtUtil;
+
+    public JwtAuthFilter(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
+
+        String header = request.getHeader("Authorization");
+
+        if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7);
+            if (jwtUtil.isTokenValid(token)) {
+                Long userId = jwtUtil.extractUserId(token);
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(userId, null, List.of());
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            }
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\security\JwtUtil.java =====
+
+package com.devroom.backend.security;
+
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+
+@Component
+public class JwtUtil {
+
+    @Value("${jwt.secret}")
+    private String secret;
+
+    @Value("${jwt.expiration}")
+    private Long expiration;
+
+    private SecretKey getKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
+    }
+
+    public String generateToken(Long userId, String username) {
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim("username", username)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getKey())
+                .compact();
+    }
+
+    public Claims extractClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    public Long extractUserId(String token) {
+        return Long.valueOf(extractClaims(token).getSubject());
+    }
+
+    public boolean isTokenValid(String token) {
+        try {
+            extractClaims(token);
+            return true;
+        } catch (JwtException e) {
+            return false;
+        }
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\service\AuthService.java =====
+
+package com.devroom.backend.service;
+
+import com.devroom.backend.dto.AuthResponse;
+import com.devroom.backend.dto.GitHubUserDTO;
+import com.devroom.backend.entity.User;
+import com.devroom.backend.repository.UserRepository;
+import com.devroom.backend.security.JwtUtil;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+@Service
+public class AuthService {
+
+    private final GitHubService gitHubService;
+    private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
+
+    public AuthService(GitHubService gitHubService,
+                       UserRepository userRepository,
+                       JwtUtil jwtUtil) {
+        this.gitHubService = gitHubService;
+        this.userRepository = userRepository;
+        this.jwtUtil = jwtUtil;
+    }
+
+    public AuthResponse authenticateWithGitHub(String code) {
+    String accessToken = gitHubService.exchangeCodeForToken(code);
+    GitHubUserDTO githubUser = gitHubService.getGitHubUser(accessToken);
+
+    User user = findOrCreateUser(githubUser, accessToken);
+
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername());
+
+    return new AuthResponse(
+        token,
+        user.getId(),
+        user.getUsername(),
+        user.getAvatarUrl(),
+        user.getName()
+    );
+}
+
+private User findOrCreateUser(GitHubUserDTO githubUser, String accessToken) {
+    String githubId = String.valueOf(githubUser.getId());
+    Optional<User> existing = userRepository.findByGithubId(githubId);
+
+    if (existing.isPresent()) {
+        User user = existing.get();
+        user.setAvatarUrl(githubUser.getAvatarUrl());
+        user.setName(githubUser.getName());
+        user.setGithubAccessToken(accessToken);
+        user.setUpdatedAt(LocalDateTime.now());
+        return userRepository.save(user);
+    }
+
+    User newUser = new User();
+    newUser.setGithubId(githubId);
+    newUser.setUsername(githubUser.getLogin());
+    newUser.setName(githubUser.getName());
+    newUser.setEmail(githubUser.getEmail());
+    newUser.setBio(githubUser.getBio());
+    newUser.setLocation(githubUser.getLocation());
+    newUser.setAvatarUrl(githubUser.getAvatarUrl());
+    newUser.setGithubUrl(githubUser.getHtmlUrl());
+    newUser.setGithubAccessToken(accessToken);
+    newUser.setCreatedAt(LocalDateTime.now());
+    newUser.setUpdatedAt(LocalDateTime.now());
+    return userRepository.save(newUser);
+}
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\service\FeedService.java =====
+
+package com.devroom.backend.service;
+
+import com.devroom.backend.dto.FeedActivityDTO;
+import com.devroom.backend.entity.FeedActivity;
+import com.devroom.backend.entity.Follow;
+import com.devroom.backend.entity.User;
+import com.devroom.backend.repository.FeedActivityRepository;
+import com.devroom.backend.repository.FollowRepository;
+import com.devroom.backend.repository.UserRepository;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class FeedService {
+
+    private final FeedActivityRepository feedRepository;
+    private final FollowRepository followRepository;
+    private final UserRepository userRepository;
+
+    public FeedService(FeedActivityRepository feedRepository,
+                       FollowRepository followRepository,
+                       UserRepository userRepository) {
+        this.feedRepository = feedRepository;
+        this.followRepository = followRepository;
+        this.userRepository = userRepository;
+    }
+
+    public List<FeedActivityDTO> getFeedForUser(Long userId, int page, int size) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        List<User> following = followRepository.findByFollower(user).stream()
+                .map(Follow::getFollowedUser)
+                .collect(Collectors.toList());
+        following.add(user);
+
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        return feedRepository.findByUserIn(following, pageable).stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    private FeedActivityDTO mapToDTO(FeedActivity activity) {
+        return FeedActivityDTO.builder()
+                .id(activity.getId())
+                .actorUsername(activity.getUser().getUsername())
+                .actorAvatarUrl(activity.getUser().getAvatarUrl())
+                .type(activity.getType())
+                .content(activity.getContent())
+                .refId(activity.getRefId())
+                .createdAt(activity.getCreatedAt())
+                .build();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\service\GitHubService.java =====
+
+package com.devroom.backend.service;
+
+import com.devroom.backend.dto.GitHubUserDTO;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.Map;
+
+@Service
+public class GitHubService {
+
+    @Value("${github.client-id}")
+    private String clientId;
+
+    @Value("${github.client-secret}")
+    private String clientSecret;
+
+    @Value("${github.redirect-uri}")
+    private String redirectUri;
+
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    public String exchangeCodeForToken(String code) {
+        String url = "https://github.com/login/oauth/access_token";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(java.util.List.of(MediaType.APPLICATION_JSON));
+
+        Map<String, String> body = Map.of(
+            "client_id", clientId,
+            "client_secret", clientSecret,
+            "code", code,
+            "redirect_uri", redirectUri
+        );
+
+        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
+        ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
+
+        if (response.getBody() != null && response.getBody().containsKey("access_token")) {
+            return (String) response.getBody().get("access_token");
+        }
+
+        throw new RuntimeException("No se pudo obtener el access token de GitHub");
+    }
+
+    public GitHubUserDTO getGitHubUser(String accessToken) {
+        String url = "https://api.github.com/user";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.set("Accept", "application/vnd.github+json");
+
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        ResponseEntity<GitHubUserDTO> response = restTemplate.exchange(
+            url, HttpMethod.GET, request, GitHubUserDTO.class
+        );
+
+        return response.getBody();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\service\JobService.java =====
+
+package com.devroom.backend.service;
+
+import com.devroom.backend.dto.CreateJobDTO;
+import com.devroom.backend.dto.JobApplicationDTO;
+import com.devroom.backend.dto.JobDTO;
+import com.devroom.backend.entity.Job;
+import com.devroom.backend.entity.JobApplication;
+import com.devroom.backend.entity.User;
+import com.devroom.backend.repository.JobApplicationRepository;
+import com.devroom.backend.repository.JobRepository;
+import com.devroom.backend.repository.UserRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class JobService {
+
+    private final JobRepository jobRepository;
+    private final JobApplicationRepository applicationRepository;
+    private final UserRepository userRepository;
+
+    public JobService(JobRepository jobRepository,
+                      JobApplicationRepository applicationRepository,
+                      UserRepository userRepository) {
+        this.jobRepository = jobRepository;
+        this.applicationRepository = applicationRepository;
+        this.userRepository = userRepository;
+    }
+
+    public List<JobDTO> listActiveJobs(String modality, String search) {
+        return jobRepository.findByIsActiveTrue().stream()
+                .filter(j -> modality == null || modality.equalsIgnoreCase(j.getModality()))
+                .filter(j -> search == null ||
+                        j.getTitle().toLowerCase().contains(search.toLowerCase()) ||
+                        (j.getCompanyName() != null && j.getCompanyName().toLowerCase().contains(search.toLowerCase())))
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    public JobDTO createJob(Long userId, CreateJobDTO dto) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        Job job = Job.builder()
+                .title(dto.getTitle())
+                .description(dto.getDescription())
+                .companyName(dto.getCompanyName())
+                .location(dto.getLocation())
+                .salaryRange(dto.getSalaryRange())
+                .modality(dto.getModality())
+                .expiresAt(dto.getExpiresAt())
+                .user(user)
+                .build();
+        return mapToDTO(jobRepository.save(job));
+    }
+
+    public JobDTO getJobById(String id) {
+        return mapToDTO(jobRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Oferta no encontrada")));
+    }
+
+    public JobDTO updateJob(Long userId, String jobId, CreateJobDTO dto) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Oferta no encontrada"));
+        if (!job.getUser().getId().equals(userId))
+            throw new RuntimeException("No tienes permiso para editar esta oferta");
+        if (dto.getTitle() != null) job.setTitle(dto.getTitle());
+        if (dto.getDescription() != null) job.setDescription(dto.getDescription());
+        if (dto.getCompanyName() != null) job.setCompanyName(dto.getCompanyName());
+        if (dto.getLocation() != null) job.setLocation(dto.getLocation());
+        if (dto.getSalaryRange() != null) job.setSalaryRange(dto.getSalaryRange());
+        if (dto.getModality() != null) job.setModality(dto.getModality());
+        if (dto.getExpiresAt() != null) job.setExpiresAt(dto.getExpiresAt());
+        return mapToDTO(jobRepository.save(job));
+    }
+
+    public void deleteJob(Long userId, String jobId) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Oferta no encontrada"));
+        if (!job.getUser().getId().equals(userId))
+            throw new RuntimeException("No tienes permiso para eliminar esta oferta");
+        jobRepository.delete(job);
+    }
+
+    public JobApplicationDTO applyToJob(Long userId, String jobId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Oferta no encontrada"));
+        if (applicationRepository.existsByUserAndJob(user, job))
+            throw new RuntimeException("Ya aplicaste a esta oferta");
+        JobApplication app = JobApplication.builder()
+                .user(user)
+                .job(job)
+                .status("PENDING")
+                .build();
+        return mapAppToDTO(applicationRepository.save(app));
+    }
+
+    public List<JobApplicationDTO> getApplications(Long userId, String jobId) {
+        Job job = jobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Oferta no encontrada"));
+        if (!job.getUser().getId().equals(userId))
+            throw new RuntimeException("No tienes permiso para ver las aplicaciones");
+        return applicationRepository.findByJob(job).stream()
+                .map(this::mapAppToDTO)
+                .collect(Collectors.toList());
+    }
+
+    private JobDTO mapToDTO(Job job) {
+        return JobDTO.builder()
+                .id(job.getId())
+                .title(job.getTitle())
+                .description(job.getDescription())
+                .companyName(job.getCompanyName())
+                .location(job.getLocation())
+                .salaryRange(job.getSalaryRange())
+                .modality(job.getModality())
+                .isActive(job.getIsActive())
+                .publishedAt(job.getPublishedAt())
+                .expiresAt(job.getExpiresAt())
+                .postedByUserId(job.getUser().getId())
+                .postedByUsername(job.getUser().getUsername())
+                .postedByAvatarUrl(job.getUser().getAvatarUrl())
+                .applicantsCount(applicationRepository.countByJob(job))
+                .build();
+    }
+
+    private JobApplicationDTO mapAppToDTO(JobApplication app) {
+        return JobApplicationDTO.builder()
+                .id(app.getId())
+                .jobId(app.getJob().getId())
+                .jobTitle(app.getJob().getTitle())
+                .applicantId(app.getUser().getId())
+                .applicantUsername(app.getUser().getUsername())
+                .applicantAvatarUrl(app.getUser().getAvatarUrl())
+                .status(app.getStatus())
+                .matchScore(app.getMatchScore())
+                .appliedAt(app.getAppliedAt())
+                .build();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\service\RepositoryService.java =====
+
+package com.devroom.backend.service;
+
+import com.devroom.backend.dto.GitHubRepoDTO;
+import com.devroom.backend.dto.RepoDTO;
+import com.devroom.backend.entity.RepositoryEntity;
+import com.devroom.backend.entity.User;
+import com.devroom.backend.repository.RepositoryEntityRepository;
+import com.devroom.backend.repository.UserRepository;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.*;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class RepositoryService {
+
+    private final RepositoryEntityRepository repoRepository;
+    private final UserRepository userRepository;
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    public RepositoryService(RepositoryEntityRepository repoRepository,
+                              UserRepository userRepository) {
+        this.repoRepository = repoRepository;
+        this.userRepository = userRepository;
+    }
+
+    public List<RepoDTO> getReposByUsername(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return repoRepository.findByUser(user).stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    public int syncReposFromGitHub(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(user.getGithubAccessToken());
+        headers.set("Accept", "application/vnd.github+json");
+
+        ResponseEntity<List<GitHubRepoDTO>> response = restTemplate.exchange(
+                "https://api.github.com/user/repos?per_page=100&sort=updated",
+                HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<List<GitHubRepoDTO>>() {});
+
+        List<GitHubRepoDTO> ghRepos = response.getBody();
+        if (ghRepos == null) return 0;
+
+        repoRepository.deleteByUser(user);
+
+        List<RepositoryEntity> toSave = ghRepos.stream()
+                .map(gh -> RepositoryEntity.builder()
+                        .githubRepoId(gh.getId() != null ? String.valueOf(gh.getId()) : null)
+                        .name(gh.getName())
+                        .description(gh.getDescription())
+                        .url(gh.getHtmlUrl())
+                        .mainLanguage(gh.getLanguage())
+                        .isPrivate(Boolean.TRUE.equals(gh.getIsPrivate()))
+                        .user(user)
+                        .build())
+                .collect(Collectors.toList());
+
+        repoRepository.saveAll(toSave);
+        return toSave.size();
+    }
+
+    private RepoDTO mapToDTO(RepositoryEntity repo) {
+        return RepoDTO.builder()
+                .id(repo.getId())
+                .githubRepoId(repo.getGithubRepoId())
+                .name(repo.getName())
+                .description(repo.getDescription())
+                .url(repo.getUrl())
+                .mainLanguage(repo.getMainLanguage())
+                .commits(repo.getCommits())
+                .scoreLevel(repo.getScoreLevel())
+                .isPrivate(repo.getIsPrivate())
+                .build();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\service\UserService.java =====
+
+package com.devroom.backend.service;
+
+import com.devroom.backend.dto.UpdateUserDTO;
+import com.devroom.backend.dto.UserProfileDTO;
+import com.devroom.backend.entity.Follow;
+import com.devroom.backend.entity.User;
+import com.devroom.backend.repository.FollowRepository;
+import com.devroom.backend.repository.UserRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final FollowRepository followRepository;
+
+    public UserService(UserRepository userRepository, FollowRepository followRepository) {
+        this.userRepository = userRepository;
+        this.followRepository = followRepository;
+    }
+
+    public UserProfileDTO getProfileByUsername(String username, Long requesterId) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado: " + username));
+        return mapToDTO(user, requesterId);
+    }
+
+    public UserProfileDTO getProfileById(Long userId, Long requesterId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return mapToDTO(user, requesterId);
+    }
+
+    public UserProfileDTO updateProfile(Long userId, UpdateUserDTO dto) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        if (dto.getName() != null) user.setName(dto.getName());
+        if (dto.getBio() != null) user.setBio(dto.getBio());
+        if (dto.getLocation() != null) user.setLocation(dto.getLocation());
+        if (dto.getRole() != null) user.setRole(dto.getRole());
+        return mapToDTO(userRepository.save(user), userId);
+    }
+
+    public void follow(Long followerId, String targetUsername) {
+        User follower = userRepository.findById(followerId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        User target = userRepository.findByUsername(targetUsername)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado: " + targetUsername));
+        if (follower.getId().equals(target.getId()))
+            throw new RuntimeException("No puedes seguirte a ti mismo");
+        if (followRepository.existsByFollowerAndFollowedUser(follower, target))
+            throw new RuntimeException("Ya sigues a este usuario");
+        followRepository.save(Follow.builder().follower(follower).followedUser(target).build());
+    }
+
+    public void unfollow(Long followerId, String targetUsername) {
+        User follower = userRepository.findById(followerId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        User target = userRepository.findByUsername(targetUsername)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado: " + targetUsername));
+        Follow follow = followRepository.findByFollowerAndFollowedUser(follower, target)
+                .orElseThrow(() -> new RuntimeException("No sigues a este usuario"));
+        followRepository.delete(follow);
+    }
+
+    public List<UserProfileDTO> getFollowers(String username, Long requesterId) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return followRepository.findByFollowedUser(user).stream()
+                .map(f -> mapToDTO(f.getFollower(), requesterId))
+                .collect(Collectors.toList());
+    }
+
+    public List<UserProfileDTO> getFollowing(String username, Long requesterId) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return followRepository.findByFollower(user).stream()
+                .map(f -> mapToDTO(f.getFollowedUser(), requesterId))
+                .collect(Collectors.toList());
+    }
+
+    private UserProfileDTO mapToDTO(User user, Long requesterId) {
+        long followers = followRepository.countByFollowedUser(user);
+        long following = followRepository.countByFollower(user);
+        boolean isFollowing = false;
+        if (requesterId != null && !requesterId.equals(user.getId())) {
+            User requester = userRepository.findById(requesterId).orElse(null);
+            if (requester != null)
+                isFollowing = followRepository.existsByFollowerAndFollowedUser(requester, user);
+        }
+        return UserProfileDTO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .name(user.getName())
+                .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
+                .bio(user.getBio())
+                .location(user.getLocation())
+                .role(user.getRole())
+                .githubUrl(user.getGithubUrl())
+                .followersCount(followers)
+                .followingCount(following)
+                .isFollowing(isFollowing)
+                .build();
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\main\java\com\devroom\backend\BackendApplication.java =====
+
+package com.devroom.backend;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+
+@SpringBootApplication
+@EntityScan(basePackages = "com.devroom.backend.entity")
+@EnableJpaRepositories(basePackages = "com.devroom.backend.repository")
+public class BackendApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(BackendApplication.class, args);
+    }
+}
+
+
+===== C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend\src\test\java\com\devroom\backend\BackendApplicationTests.java =====
+
+package com.devroom.backend;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class BackendApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}

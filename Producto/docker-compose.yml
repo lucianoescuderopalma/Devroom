@@ -1,0 +1,54 @@
+services:
+
+  db:
+    image: postgres:15-alpine
+    container_name: devroom-db
+    environment:
+      POSTGRES_DB: devroom
+      POSTGRES_USER: devroom_user
+      POSTGRES_PASSWORD: devroom_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - devroom-network
+
+  backend:
+    build:
+      context: C:\Users\airao\OneDrive\Desktop\DevRoom-Backend\backend
+      dockerfile: Dockerfile
+    container_name: devroom-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/devroom
+      SPRING_DATASOURCE_USERNAME: devroom_user
+      SPRING_DATASOURCE_PASSWORD: devroom_pass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      GITHUB_CLIENT_ID: Ov23liOZ8Db9SFAgin3l
+      GITHUB_CLIENT_SECRET: f73be3bf288fa991da00d766df6fc4386aef7cea
+      JWT_SECRET: devroom-super-secret-key-2024-cambiar-en-produccion
+    depends_on:
+      - db
+    networks:
+      - devroom-network
+
+  frontend:
+    build:
+      context: C:\Users\airao\OneDrive\Desktop\DevRoom-Frontend\devroom-frontend
+      dockerfile: Dockerfile
+    container_name: devroom-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - devroom-network
+
+volumes:
+  postgres_data:
+
+networks:
+  devroom-network:
+    driver: bridge
