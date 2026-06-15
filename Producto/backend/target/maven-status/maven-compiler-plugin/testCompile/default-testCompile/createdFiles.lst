@@ -1,0 +1,5 @@
+com\devroom\backend\security\JwtUtilTest.class
+com\devroom\backend\service\UserServiceTest.class
+com\devroom\backend\BackendApplicationTests.class
+com\devroom\backend\service\JobServiceTest.class
+com\devroom\backend\service\AuthServiceTest.class
