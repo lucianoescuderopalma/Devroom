@@ -8,9 +8,9 @@ RUN npm install
 
 COPY Producto/frontend/ .
 
-ARG VITE_API_URL=http://localhost:8080
+ARG VITE_API_URL=https://devroom-flpw.onrender.com
 ARG VITE_GITHUB_CLIENT_ID=Ov23liOZ8Db9SFAgin3l
-ARG VITE_GITHUB_REDIRECT_URI=http://localhost:3000/auth/callback
+ARG VITE_GITHUB_REDIRECT_URI=https://devroom-six.vercel.app/auth/callback
 
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_GITHUB_CLIENT_ID=$VITE_GITHUB_CLIENT_ID
