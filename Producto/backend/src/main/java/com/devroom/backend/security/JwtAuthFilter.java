@@ -23,25 +23,27 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     @Override
-protected void doFilterInternal(HttpServletRequest request,
-                                HttpServletResponse response,
-                                FilterChain filterChain)
-        throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
 
-    String header = request.getHeader("Authorization");
-    System.out.println(">>> AUTH HEADER: " + header);
+        String header = request.getHeader("Authorization");
+        System.out.println(">>> AUTH HEADER: " + header);
 
-    if (header != null && header.startsWith("Bearer ")) {
-        String token = header.substring(7);
-        System.out.println(">>> TOKEN VALID: " + jwtUtil.isTokenValid(token));
-        if (jwtUtil.isTokenValid(token)) {
-            Long userId = jwtUtil.extractUserId(token);
-            System.out.println(">>> USER ID: " + userId);
-            UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(userId, null, List.of());
-            SecurityContextHolder.getContext().setAuthentication(auth);
+        if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7);
+            boolean valid = jwtUtil.isTokenValid(token);
+            System.out.println(">>> TOKEN VALID: " + valid);
+            if (valid) {
+                Long userId = jwtUtil.extractUserId(token);
+                System.out.println(">>> USER ID: " + userId);
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(userId, null, List.of());
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            }
         }
-    }
 
-    filterChain.doFilter(request, response);
+        filterChain.doFilter(request, response);
+    }
 }
