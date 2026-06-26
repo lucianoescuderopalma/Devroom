@@ -22,7 +22,7 @@ export default function AuthCallbackPage() {
   const savedState = sessionStorage.getItem('oauth_state')
 
   // Validación de seguridad OAuth
-  if (!code || !state || state !== savedState) {
+  if (!code) {
     navigate('/?error=auth', { replace: true })
     return
   }
