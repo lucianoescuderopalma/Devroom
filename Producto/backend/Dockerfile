@@ -3,10 +3,10 @@ FROM eclipse-temurin:21-jdk-alpine AS build
 
 WORKDIR /app
 
-COPY Producto/backend/.mvn/ .mvn/
-COPY Producto/backend/mvnw .
-COPY Producto/backend/pom.xml .
-COPY Producto/backend/src ./src
+COPY .mvn/ .mvn/
+COPY mvnw .
+COPY pom.xml .
+COPY src ./src
 
 RUN chmod +x mvnw && ./mvnw clean package -DskipTests
 
