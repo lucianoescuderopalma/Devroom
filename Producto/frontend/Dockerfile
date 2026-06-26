@@ -8,8 +8,8 @@ RUN npm install
 
 COPY . .
 
-ARG VITE_GITHUB_REDIRECT_URI=http://localhost:3000/auth/callback
-ARG VITE_API_URL=http://localhost:8080
+ARG VITE_GITHUB_REDIRECT_URI=https://devroom-six.vercel.app/auth/callback
+ARG VITE_API_URL=https://devroom-flpw.onrender.com
 ARG VITE_GITHUB_CLIENT_ID=Ov23liOZ8Db9SFAgin3l
 
 ENV VITE_GITHUB_REDIRECT_URI=$VITE_GITHUB_REDIRECT_URI
