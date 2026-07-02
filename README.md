@@ -1,4 +1,3 @@
-
 # DevRoom
 
 **DevRoom** es una plataforma orientada a desarrolladores que conecta identidad técnica, visibilidad profesional y oportunidades laborales en un solo ecosistema.
