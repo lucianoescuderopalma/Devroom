@@ -161,7 +161,7 @@ DevRoom utiliza PostgreSQL como sistema de persistencia principal.
 
 El modelo de datos se centra en la entidad `User` y se expande hacia repositorios, tecnologías, empleos, postulaciones, conexiones sociales y currículum.
 
-Relaciones importantes:
+Relaciones importantes :
 
 - Un usuario puede tener múltiples repositorios.
 - Un repositorio puede asociarse a múltiples tecnologías.
